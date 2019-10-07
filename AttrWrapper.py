@@ -9,6 +9,20 @@ from explainer.Attribution import KerasAttr
 import numpy as np
 
 
+def largest_indices(ary, n):
+    """Returns the n largest indices from a numpy array."""
+    flat = ary.flatten()
+    indices = np.argpartition(flat, -n)[-n:]
+    indices = indices[np.argsort(-flat[indices])]
+    indices = np.unravel_index(indices, ary.shape)
+    x, y = indices[0], indices[1]
+    xx = x.reshape((1, x.shape[0]))
+    yy = y.reshape((1, y.shape[0]))
+    result = [xx, yy]
+    result = np.vstack(result)
+    return result
+
+
 class AttributionWrapper:
     def __init__(self, model, qoi, batch_size, mul_with_input):
         self.batch_size = batch_size
@@ -161,3 +175,62 @@ class ChannelInflWrapper(AttributionWrapper):
             infl_as_wts=True,
             interest_mask=self.qoi,
             multiply_with_input=self.mul_with_input)
+
+
+class LocalOptimal(AttributionWrapper):
+    def __init__(self,
+                 infl_model,
+                 qoi,
+                 prob_layer='fc6',
+                 search_space=1000,
+                 max_step=1000):
+        super(LocalOptimal, self).__init__(None, qoi, 1, False)
+        self.infl_model = infl_model
+        self.prob_layer = prob_layer
+        self.search_space = search_space
+        self.optimal_path = []
+        self.max_step = self.max_step
+
+    def find_optimal_path(self, X):
+        self.optimal_path = []
+        img = X[0].copy()
+        img_width, img_height = img.shape[0], img.shape[1]
+        for _ in range(self.max_step):
+            candidate_space = largest_indices(
+                np.random.randn(img_width, img_height), 2 * self.search_space)
+
+            best_score = 1e10
+            best_candidate = None
+
+            for n, candidate in enumerate(candidate_space):
+                if n > self.search_space:
+                    break
+                if img[candidate[0], candidate[1], :].mean() == 0:
+                    continue
+                perturbation = img.copy()
+                perturbation[candidate[0], candidate[1], :] = 0
+                score = self.infl_model.get_activation(perturbation[None, :],
+                                                       self.prob_layer)
+                score = score[0, self.qoi.get_class()]
+
+                if score < best_score:
+                    best_score = score
+                    best_candidate = candidate
+
+            if best_candidate is not None:
+                self.optimal_path.append(best_candidate)
+                img[best_candidate[0], best_candidate[1], :] = 0
+
+    def __call__(self, X):
+        self.find_optimal_path(X)
+        result = np.zeros_like(X)
+        high_score = 1e5
+        for point in self.optimal_path:
+            result[:, point[0], point[1], 0] = high_score
+            high_score -= 0.1
+        return result
+
+
+class RandomAttribution:
+    def __call__(self, X):
+        return np.random.randn(X.shape[0], X.shape[1], X.shape[2])

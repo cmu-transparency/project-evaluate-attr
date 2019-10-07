@@ -8,7 +8,7 @@ def K_Necessity(pre_softmax_scores, K=0.1, resolution=1):
 
     pixel_removed = i * resolution
 
-    return pixel_removed / (1e-16 + score_drop)
+    return  score_drop / (pixel_removed + 1e-16)
 
 
 def K_Sufficiency(pre_softmax_scores, K=0.9, original_score=None,
@@ -20,4 +20,4 @@ def K_Sufficiency(pre_softmax_scores, K=0.9, original_score=None,
         if s > score_increase:
             break
     pixel_added = i * resolution
-    return pixel_added / (1e-16 + score_increase)
+    return score_increase / (1e-16 + pixel_added)

@@ -137,7 +137,7 @@ def main():
     args = parser.parse_args()
 
     model = load_model()
-    X_test, _ = load_dataset(max_instance=1000)
+    X_test, _ = load_dataset(max_instance=2000)
 
     infl_model = KerasInflExp(model, channel_first=False, verbose=False)
 
@@ -182,7 +182,7 @@ def main():
         score.append(s)
     score = np.array(score)
     np.save(args.method + "_" + str(args.K_value) + "-Necessity.npy", score)
-    print("Attribution : {0:s}, {1:f}-Necessity: {2:f}".format(
+    print("Attribution : {0:s}, {1:.2f}-Necessity: {2:f}".format(
         args.method, args.K_value, score.mean()))
 
 
