@@ -137,7 +137,9 @@ def main():
     args = parser.parse_args()
 
     model = load_model()
-    X_test, _ = load_dataset(max_instance=2000)
+    X_test, _ = load_dataset(max_instance=2)
+    preds = model.predict(X_test)
+    preds = np.argmax(preds, axis=-1)
 
     infl_model = KerasInflExp(model, channel_first=False, verbose=False)
 
@@ -171,6 +173,8 @@ def main():
     score = []
     for i in trange(len(X_test)):
         target = X_test[i:i + 1] if i < len(X_test) - 1 else X_test[i:]
+        target_qoi = Q.ClassInterest(preds[i])
+        attr_fn.set_qoi(target_qoi)
         s = necessity_stat(infl_model,
                            target,
                            attr_fn,

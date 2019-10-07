@@ -17,6 +17,9 @@ class KerasAttr:
         self.verbose = verbose
         self.grad_fn = None
 
+    def set_qoi(self, new_qoi):
+        self.qoi = new_qoi
+
     def _saliency_map_fn(self):
         if self.grad_fn is None:
             output_scalor = self.qoi(self.model.output)

@@ -1,14 +1,13 @@
-def K_Necessity(pre_softmax_scores, K=0.1, resolution=1):
+def K_Necessity(pre_softmax_scores, K=0.9, resolution=1):
     original_score = pre_softmax_scores[0]
-    score_drop = K * original_score
-    pre_softmax_scores -= score_drop
+    threshold = K * original_score
     for i, s in enumerate(pre_softmax_scores):
-        if s < 0:
+        if s < threshold:
             break
 
     pixel_removed = i * resolution
 
-    return  score_drop / (pixel_removed + 1e-16)
+    return (original_score - pre_softmax_scores[i]) / (pixel_removed + 1e-16)
 
 
 def K_Sufficiency(pre_softmax_scores, K=0.9, original_score=None,

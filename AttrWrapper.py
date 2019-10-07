@@ -32,6 +32,7 @@ class AttributionWrapper:
 
     def set_qoi(self, new_qoi):
         self.qoi = new_qoi
+        self.attr_fn.set_qoi(self.qoi)
 
     def __call__(self, x):
         raise NotImplementedError
@@ -65,9 +66,9 @@ class SmoothGradWrapper(AttributionWrapper):
                                                 mul_with_input)
 
     def __call__(self, X):
-        return self.attr_fn.integrated_grad(X,
-                                            batch_size=self.batch_size,
-                                            mul_with_input=self.mul_with_input)
+        return self.attr_fn.smooth_grad(X,
+                                        batch_size=self.batch_size,
+                                        mul_with_input=self.mul_with_input)
 
 
 class GradCAMWrapper(AttributionWrapper):
