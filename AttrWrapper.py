@@ -7,6 +7,9 @@ import keras.backend as K
 import explainer.QuantityInterests as Q
 from explainer.Attribution import KerasAttr
 import numpy as np
+from densenet import densenet121_model
+COLOR_MEAN = [123.68, 116.779, 103.939]
+LONGTERM = "/longterm/zifanw/Caltech/"
 
 
 def largest_indices(ary, n):
@@ -23,6 +26,25 @@ def largest_indices(ary, n):
     return result
 
 
+def load_model():
+    img_rows, img_cols = 224, 224
+    img_channels = 3
+    nb_classes = 257
+
+    model = densenet121_model(img_rows=img_rows,
+                              img_cols=img_cols,
+                              color_type=img_channels,
+                              num_classes=nb_classes,
+                              weight_path_prefix="../")
+    print('=' * 50)
+    print('Model is created')
+    #     model.summary()
+
+    model.load_weights(LONGTERM + '/weights/DenseNetCaltech.h5')
+
+    return model
+
+
 class AttributionWrapper:
     def __init__(self, model, qoi, batch_size, mul_with_input):
         self.batch_size = batch_size
@@ -33,6 +55,9 @@ class AttributionWrapper:
     def set_qoi(self, new_qoi):
         self.qoi = new_qoi
         self.attr_fn.set_qoi(self.qoi)
+
+    def reset(self, new_qoi, **kwargs):
+        self.set_qoi(new_qoi)
 
     def __call__(self, x):
         raise NotImplementedError
@@ -50,13 +75,25 @@ class SaliencyMapWrapper(AttributionWrapper):
 
 
 class IntergratedGradWrapper(AttributionWrapper):
-    def __init__(self, model, qoi, batch_size=16, mul_with_input=True):
+    def __init__(self,
+                 model,
+                 qoi,
+                 batch_size=16,
+                 mul_with_input=True,
+                 imagenet_baseline=True):
         super(IntergratedGradWrapper, self).__init__(model, qoi, batch_size,
                                                      mul_with_input)
+        self.imagenet_baseline = imagenet_baseline
 
     def __call__(self, X):
+        baseline = np.zeros_like(X)
+        if self.imagenet_baseline == True:
+            baseline[:, :, :, 0] -= COLOR_MEAN[0]
+            baseline[:, :, :, 1] -= COLOR_MEAN[1]
+            baseline[:, :, :, 2] -= COLOR_MEAN[2]
         return self.attr_fn.integrated_grad(X,
                                             batch_size=self.batch_size,
+                                            baseline=baseline,
                                             mul_with_input=self.mul_with_input)
 
 
@@ -111,8 +148,22 @@ class NeuronInflWrapper(AttributionWrapper):
         self.experts = EU.Expert("Neuron")
         self.top_idx = np.arange(self.topK)
 
+    def set_qoi(self, new_qoi):
+        self.qoi = new_qoi
+
     def set_doi(self, doi):
         self.attr_fn.set_doi_type(doi)
+
+    def reset(self, new_qoi, X_test=None):
+        if self.qoi.get_class() != new_qoi.get_class():
+            # model = load_model()
+            # self.attr_fn = KerasInflExp(model,
+            #                             channel_first=self.channel_first,
+            #                             verbose=False)
+            self.set_qoi(new_qoi)
+            self.experts = EU.Expert("Neuron")
+            if X_test is not None:
+                self.find_experts(X_test)
 
     def find_experts(self, X_test, from_layer='fc6'):
         raw_infl = self.attr_fn.internal_infl(X_test,
@@ -153,8 +204,22 @@ class ChannelInflWrapper(AttributionWrapper):
         self.experts = EU.Expert("Channel")
         self.top_idx = np.arange(self.topK)
 
+    def set_qoi(self, new_qoi):
+        self.qoi = new_qoi
+
     def set_doi(self, doi):
         self.attr_fn.set_doi_type(doi)
+
+    def reset(self, new_qoi, X_test=None):
+        if self.qoi.get_class() != new_qoi.get_class():
+            # model = load_model()
+            # self.attr_fn = KerasInflExp(model,
+            #                             channel_first=self.channel_first,
+            #                             verbose=False)
+            self.set_qoi(new_qoi)
+            self.experts = EU.Expert("Channel")
+            if X_test is not None:
+                self.find_experts(X_test)
 
     def find_experts(self, X_test, from_layer='fc6'):
         raw_infl = self.attr_fn.internal_infl(X_test,

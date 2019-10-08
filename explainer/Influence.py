@@ -4,14 +4,14 @@ import numpy as np
 from .computing_utils import *
 from time import time
 from tqdm import tqdm, trange
-from .QuantityInterests import ChannelInterest, MultiUnitInterest
+from .QuantityInterests import ClassInterest, ChannelInterest, MultiUnitInterest
 
 
 def numpy_relu(x):
     """numpy_relu Numpy implementation of relu
 
     Arguments:
-        x {np.ndarray} -- input 
+        x {np.ndarray} -- input
 
     Returns:
         np.ndarray -- output
@@ -58,6 +58,8 @@ class KerasInflExp(object):
             self.doi_type = doi_type + '_infl'
         else:
             raise ValueError("Not a supported doi type")
+
+        self.history_grad = {}
 
     def get_model(self):
         """get_model Return the wrapped model
@@ -127,6 +129,11 @@ class KerasInflExp(object):
             K.function: list --> list -- Keras backend function to
                 compute the influence
         """
+
+        if isinstance(interest_mask, ClassInterest):
+            if (interest_mask.get_class(), from_layer, wrt_layer) in self.history_grad:
+                return self.history_grad[(interest_mask.get_class(), from_layer, wrt_layer)]
+
         if isinstance(from_layer, str):
             if from_layer == 'output':
                 from_tensor = self._model.output
@@ -151,7 +158,10 @@ class KerasInflExp(object):
         else:
             grad = K.gradients(interest_mask(from_tensor), [wrt_tensor])
 
-        return K.function(self._model.inputs, grad)
+        grad_fn = K.function(self._model.inputs, grad)
+        self.history_grad[(interest_mask.get_class(),
+                           from_layer, wrt_layer)] = grad_fn
+        return grad_fn
 
     def internal_infl(self,
                       X,

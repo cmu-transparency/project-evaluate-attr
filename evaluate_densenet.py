@@ -103,9 +103,10 @@ def necessity_stat(infl_model,
                    metric=K_Necessity,
                    K=0.1):
     # get the original attribution map
+    # np.save("target.npy", target)
     attribution_map = attr_fn(target)
     attribution_map = V.point_cloud(attribution_map, threshold=0)[0]
-
+    # np.save("attribution_map.npy", attribution_map)
     # find the prediction class to determine
     # which class to pick for the pre-softmax score
     prediction = attr_fn.qoi.get_class()
@@ -117,14 +118,18 @@ def necessity_stat(infl_model,
     # sort the pixels by its attribution score
     pos_attr_id = largest_indices(attribution_map, max_num_pixel)
     result = []
-    for j in range(0, pos_attr_id.shape[1], step):
+    for j in range(0, max_num_pixel, step):
         img = target[0].copy()
         if j > 0:
-            img[pos_attr_id[0][:j], pos_attr_id[1][:j], :] = 0
+            # img[pos_attr_id[0][:j], pos_attr_id[1][:j], :] = 0
+            img[pos_attr_id[0][:j], pos_attr_id[1][:j], 0] = -COLOR_MEAN[0]
+            img[pos_attr_id[0][:j], pos_attr_id[1][:j], 1] = -COLOR_MEAN[1]
+            img[pos_attr_id[0][:j], pos_attr_id[1][:j], 2] = -COLOR_MEAN[2]
         result.append(img[None, :])
     removed = np.vstack(result)
     pre_softmax_scores = infl_model.get_activation(removed,
                                                    "fc6")[:, prediction]
+    # np.save("pre_softmax_scores.npy", pre_softmax_scores)
 
     # Measure the necessity
     if metric is not None:
@@ -137,7 +142,7 @@ def main():
     args = parser.parse_args()
 
     model = load_model()
-    X_test, _ = load_dataset(max_instance=2)
+    X_test, _ = load_dataset(max_instance=1000)
     preds = model.predict(X_test)
     preds = np.argmax(preds, axis=-1)
 
@@ -148,7 +153,9 @@ def main():
         attr_fn = SaliencyMapWrapper(model, default_qoi)
 
     elif args.method == 'integratedgrad':
-        attr_fn = IntergratedGradWrapper(model, default_qoi)
+        attr_fn = IntergratedGradWrapper(model,
+                                         default_qoi,
+                                         imagenet_baseline=True)
 
     elif args.method == 'smoothgrad':
         attr_fn = SmoothGradWrapper(model, default_qoi)
@@ -161,11 +168,11 @@ def main():
 
     elif args.method == 'neuroninfl':
         attr_fn = NeuronInflWrapper(model, default_qoi, "concatenate_55")
-        attr_fn.find_experts(X_test, 'fc6')
+        # attr_fn.find_experts(X_test, 'fc6')
 
     elif args.method == 'channelinfl':
         attr_fn = ChannelInflWrapper(model, default_qoi, "concatenate_55")
-        attr_fn.find_experts(X_test, 'fc6')
+        # attr_fn.find_experts(X_test, 'fc6')
 
     else:
         raise ValueError("not a supported attribution methods")
@@ -174,18 +181,19 @@ def main():
     for i in trange(len(X_test)):
         target = X_test[i:i + 1] if i < len(X_test) - 1 else X_test[i:]
         target_qoi = Q.ClassInterest(preds[i])
-        attr_fn.set_qoi(target_qoi)
+        attr_fn.reset(target_qoi, X_test=X_test)
         s = necessity_stat(infl_model,
                            target,
                            attr_fn,
                            blur=0,
-                           max_num_pixel=1000,
+                           max_num_pixel=2000,
                            step=20,
                            metric=K_Necessity,
                            K=args.K_value)
         score.append(s)
     score = np.array(score)
-    np.save(args.method + "_" + str(args.K_value) + "-Necessity.npy", score)
+    np.save(args.method + "_" + str(args.K_value) + "-Necessity1000.npy",
+            score)
     print("Attribution : {0:s}, {1:.2f}-Necessity: {2:f}".format(
         args.method, args.K_value, score.mean()))
 
